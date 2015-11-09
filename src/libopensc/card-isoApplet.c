@@ -116,7 +116,7 @@ isoApplet_select_applet(sc_card_t *card, const u8 *aid, const size_t aid_len, u8
 	if(aid_len > SC_MAX_APDU_BUFFER_SIZE)
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_BUFFER_TOO_SMALL);
 
-	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0xa4, 0x04, 0x00);
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0xa4, 0x04, 0x00);
 	apdu.lc = aid_len;
 	apdu.data = aid;
 	apdu.datalen = aid_len;
