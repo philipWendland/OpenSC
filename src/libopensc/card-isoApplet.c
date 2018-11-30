@@ -33,7 +33,7 @@
 #define ISOAPPLET_ALG_REF_RSA_PAD_PKCS1 0x11
 
 #define ISOAPPLET_API_VERSION_MAJOR 0x00
-#define ISOAPPLET_API_VERSION_MINOR 0x06
+#define ISOAPPLET_API_VERSION_MINOR 0x07
 
 #define ISOAPPLET_API_FEATURE_EXT_APDU 0x01
 #define ISOAPPLET_API_FEATURE_SECURE_RANDOM 0x02
@@ -116,13 +116,13 @@ isoApplet_select_applet(sc_card_t *card, const u8 *aid, const size_t aid_len, u8
 	if(aid_len > SC_MAX_APDU_BUFFER_SIZE)
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_BUFFER_TOO_SMALL);
 
-	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0xa4, 0x04, 0x00);
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_4, 0xa4, 0x04, 0x00);
 	apdu.lc = aid_len;
 	apdu.data = aid;
 	apdu.datalen = aid_len;
 	apdu.resp = resp;
 	apdu.resplen = *resp_len;
-	apdu.le = 0;
+	apdu.le = 3;
 
 	rv = sc_transmit_apdu(card, &apdu);
 	LOG_TEST_RET(ctx, rv, "APDU transmit failure.");
@@ -259,6 +259,7 @@ isoApplet_init(sc_card_t *card)
 				_sc_card_add_ec_alg(card, ec_curves[i].size, flags, ext_flags, &ec_curves[i].oid);
 		}
 	}
+	card->caps |= SC_CARD_CAP_ISO7816_PIN_INFO;
 
 	/* RSA */
 	flags = 0;
@@ -294,7 +295,7 @@ isoApplet_acl_to_security_condition_byte(const sc_acl_entry_t *entry)
 	switch(entry->method)
 	{
 	case SC_AC_CHV:
-		return 0x90;
+		return 0x90 | (entry->key_ref - 1);
 	case SC_AC_NEVER:
 		return 0xFF;
 	case SC_AC_NONE:
@@ -419,7 +420,14 @@ isoApplet_add_sa_to_acl(sc_file_t *file, unsigned int operation, u8 saByte)
 			return r;
 		break;
 	default:
-		r = sc_file_add_acl_entry(file, operation, SC_AC_UNKNOWN, SC_AC_KEY_REF_NONE);
+		if ((saByte & 0x90) == 0x90)
+		{
+			r = sc_file_add_acl_entry(file, operation, SC_AC_CHV, (saByte & 0x0F) + 1);
+		}
+		else
+		{
+			r = sc_file_add_acl_entry(file, operation, SC_AC_UNKNOWN, SC_AC_KEY_REF_NONE);
+		}
 		if(r < 0)
 			return r;
 	}
@@ -551,6 +559,31 @@ isoApplet_put_ec_params(sc_card_t *card, sc_cardctl_isoApplet_ec_parameters_t *p
 	if (ptr != NULL)
 		*ptr = p;
 	LOG_FUNC_RETURN(card->ctx, r);
+}
+
+
+/*
+ * @brief Initialise token (truncate label). In case of failed (previous) initialisation
+ * send INITIALISE apdu to clean-up card fs.
+ */
+static int
+isoApplet_ctl_init_token(sc_card_t *card, sc_cardctl_pkcs11_init_token_t *args)
+{
+	int r;
+	sc_apdu_t apdu;
+
+	LOG_FUNC_CALLED(card->ctx);
+
+	/* ISO7816 proprietary INITIALISE apdu */
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x51, 0x00, 0x00);
+	apdu.cla = 0x80;
+	r = sc_transmit_apdu(card, &apdu);
+	SC_TEST_RET(card->ctx, SC_LOG_DEBUG_NORMAL, r,  "APDU transmit failed");
+	r = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(card->ctx, r, "Card returned error");
+
+	/* Continue with ISO7816 init workflow */
+	LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_SUPPORTED);
 }
 
 /*
@@ -1086,6 +1119,28 @@ isoApplet_ctl_import_key(sc_card_t *card, sc_cardctl_isoApplet_import_key_t *arg
 	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 }
 
+/*
+ * @brief Erase card
+ */
+static int
+isoApplet_ctl_erase_card(sc_card_t *card)
+{
+	int r;
+	sc_apdu_t apdu;
+
+	LOG_FUNC_CALLED(card->ctx);
+	/* ISO7816 proprietary INITIALISE apdu */
+	card->cla = 0x80;
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x50, 0x00, 0x00);
+	card->cla = 0x00;
+	r = sc_transmit_apdu(card, &apdu);
+	SC_TEST_RET(card->ctx, SC_LOG_DEBUG_NORMAL, r,  "APDU transmit failed");
+	r = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(card->ctx, r, "Card returned error");
+	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+}
+
+
 static int
 isoApplet_card_ctl(sc_card_t *card, unsigned long cmd, void *ptr)
 {
@@ -1094,6 +1149,10 @@ isoApplet_card_ctl(sc_card_t *card, unsigned long cmd, void *ptr)
 	LOG_FUNC_CALLED(card->ctx);
 	switch (cmd)
 	{
+	case SC_CARDCTL_PKCS11_INIT_TOKEN:
+		r =  isoApplet_ctl_init_token(card,
+		                               (sc_cardctl_pkcs11_init_token_t *) ptr);
+		break;
 	case SC_CARDCTL_ISOAPPLET_GENERATE_KEY:
 		r = isoApplet_ctl_generate_key(card,
 		                               (sc_cardctl_isoApplet_genkey_t *) ptr);
@@ -1105,6 +1164,9 @@ isoApplet_card_ctl(sc_card_t *card, unsigned long cmd, void *ptr)
 	case SC_CARDCTL_ISOAPPLET_IMPORT_KEY:
 		r = isoApplet_ctl_import_key(card,
 		                             (sc_cardctl_isoApplet_import_key_t *) ptr);
+		break;
+	case SC_CARDCTL_ERASE_CARD:
+		r = isoApplet_ctl_erase_card(card);
 		break;
 	default:
 		r = SC_ERROR_NOT_SUPPORTED;

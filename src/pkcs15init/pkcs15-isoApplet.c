@@ -176,6 +176,35 @@ static const struct ec_curve curves[] =
 
 
 /*
+ * Erase the card.
+ */
+static int
+isoApplet_erase_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card) {
+	sc_card_t *card = p15card->card;
+	struct sc_file *file;
+	struct sc_path path;
+	int r = SC_SUCCESS;
+
+	LOG_FUNC_CALLED(card->ctx);
+
+	memset(&file, 0, sizeof(file));
+	sc_format_path("3f005015", &path);
+
+	r = sc_select_file(card, &path, &file);
+	LOG_TEST_RET(card->ctx, r, "sc_select_file() failed");
+
+	r = sc_pkcs15init_authenticate(profile, p15card, file, SC_AC_OP_DELETE);
+	LOG_TEST_RET(card->ctx, r, "SC_AC_OP_DELETE authentication failed");
+
+	r = sc_card_ctl(card, SC_CARDCTL_ERASE_CARD, NULL);
+
+	if (r == SC_SUCCESS)
+		sc_free_apps(p15card->card);
+
+	LOG_FUNC_RETURN(card->ctx, r);
+}
+
+/*
  * Create DF, using default pkcs15init functions.
  */
 static int
@@ -200,8 +229,8 @@ isoApplet_create_dir(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_file_t
  * Basically (as I understand it) the caller passes an auth_info object and the
  * auth_info->attrs.pin.reference is supposed to be set accordingly and return.
  *
- * The IsoApplet only supports a PIN and a PUK at the moment.
- * The reference for the PIN is 1, for the PUK 2.
+ * The IsoApplet only supports a PIN and a SO PIN at the moment.
+ * The reference for the PIN is 0x01, for the SO PIN 0x0F
  */
 static int
 isoApplet_select_pin_reference(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
@@ -210,6 +239,7 @@ isoApplet_select_pin_reference(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
 	sc_card_t *card = p15card->card;
 	int	preferred;
 	int current;
+	int r = SC_SUCCESS;
 
 	LOG_FUNC_CALLED(card->ctx);
 
@@ -224,22 +254,28 @@ isoApplet_select_pin_reference(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
 		current = 0;
 	}
 
-	if(current > 2)
+	if(current > 0x01 && current != 0x0F)
 	{
-		/* Only two PINs supported: User PIN and PUK. */
+		/* Only two PINs supported: User PIN and SO PIN. */
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_TOO_MANY_OBJECTS);
 	}
 	else
 	{
-		if(auth_info->attrs.pin.flags & SC_PKCS15_PIN_FLAG_UNBLOCKING_PIN)
+		if(auth_info->attrs.pin.flags & SC_PKCS15_PIN_FLAG_SO_PIN)
 		{
-			/* PUK */
-			preferred = 2;
+			/* SO PIN */
+			preferred = 0x0F;
 		}
 		else
 		{
 			/* PIN */
-			preferred = 1;
+			preferred = 0x01;
+			/* Check if PIN already exists */
+			r = sc_pkcs15_find_pin_by_reference(p15card, &auth_info->path, preferred, NULL);
+			if (r != SC_ERROR_OBJECT_NOT_FOUND)
+			{
+				LOG_FUNC_RETURN(card->ctx, SC_ERROR_TOO_MANY_OBJECTS);
+			}
 		}
 	}
 
@@ -270,7 +306,7 @@ isoApplet_create_pin(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_file_t
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);
 	}
 
-	if(pin_attrs->reference != 1 &&	pin_attrs->reference != 2)
+	if(pin_attrs->reference != 0x01 && pin_attrs->reference != 0x0F)
 	{
 		/* Reject PIN reference. */
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_PIN_REFERENCE);
@@ -288,6 +324,15 @@ isoApplet_create_pin(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_file_t
 		{
 			LOG_FUNC_RETURN(card->ctx, r);
 		}
+	}
+
+	if (pin_attrs->reference == 0x01)
+	{
+		/* A hack to unset UNBLOCK_DISABLED for a User PIN object created via C_InitPIN() */
+		struct sc_pkcs15_auth_info tmpinfo;
+		sc_profile_get_pin_info(profile, SC_PKCS15INIT_USER_PIN, &tmpinfo);
+		if (!(tmpinfo.attrs.pin.flags & SC_PKCS15_PIN_FLAG_UNBLOCK_DISABLED))
+			pin_attrs->flags &= ~SC_PKCS15_PIN_FLAG_UNBLOCK_DISABLED;
 	}
 
 	/* Store PIN: (use CHANGE REFERENCE DATA). */
@@ -801,7 +846,7 @@ isoApplet_store_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_pkcs15_
 
 static struct sc_pkcs15init_operations sc_pkcs15init_isoApplet_operations =
 {
-	NULL,                           /* erase_card */
+	isoApplet_erase_card,           /* erase_card */
 	NULL,                           /* init_card */
 	isoApplet_create_dir,           /* create_dir */
 	NULL,                           /* create_domain */

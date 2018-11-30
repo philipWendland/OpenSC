@@ -33,20 +33,27 @@ option default {
 	}
 }
 
-PIN so-pin {
+PIN pin {
 	attempts   = 3;
 	max-length = 12;
 	min-length = 4;
-	reference  = 1;
+	reference  = 0x01;
 	flags = case-sensitive, needs-padding, initialized;
 }
 
-PIN so-puk {
+PIN puk {
 	attempts   = 3;
 	max-length = 12;
 	min-length = 12;
-	reference  = 2;
 	flags = unblockingPin, unblock-disabled, case-sensitive, change-disabled, initialized;
+}
+
+PIN so-pin {
+	attempts   = 3;
+	max-length = 12;
+	min-length = 12;
+	reference  = 0x0F;
+	flags = soPin, unblock-disabled, case-sensitive, initialized;
 }
 
 filesystem {
@@ -67,30 +74,30 @@ filesystem {
 			type    = DF;
 			file-id = 5015;
 			aid     = A0:00:00:00:63:50:4B:43:53:2D:31:35;
-			acl     = *=NONE, DELETE=$PIN;
+			acl     = *=NONE, DELETE=$SOPIN;
 			size    = 5000;
 		
 			EF PKCS15-ODF {
 				file-id = 5031;
 				size    = $odf-size;
-				ACL     = *=NONE;
+				acl     = *=NONE;
 			}
 
 			EF PKCS15-TokenInfo {
 				file-id = 5032;
-				ACL     = *=NONE;
+				acl     = *=NONE;
 			}
 
 			EF PKCS15-UnusedSpace {
 				file-id = 5033;
 				size    = $unusedspace-size;
-				ACL     = *=NONE;
+				acl     = *=NONE;
 			}
 
 			EF PKCS15-AODF {
 				file-id = 4401;
 				size    = $aodf-size;
-				ACL     = *=$PIN, READ=NONE;
+				acl     = *=$SOPIN, READ=NONE;
 			}
 
 			EF PKCS15-PrKDF {
@@ -114,13 +121,13 @@ filesystem {
 			EF PKCS15-DODF {
 				file-id = 4405;
 				size    = $dodf-size;
-				ACL     = *=$PIN, READ=NONE;
+				acl     = *=$PIN, READ=NONE;
 			}
 
 			template key-domain {
 
 				BSO private-key {
-					ACL = *=$PIN, READ=NEVER;
+					acl = *=$PIN, READ=NEVER;
 				}
 
 				# EF extractable-key {
