@@ -87,8 +87,12 @@ static struct isoapplet_supported_ec_curves {
 	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 5, -1}}, 224, 0x0000}, /* brainpoolP224r1 */
 	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 7, -1}}, 256, 0x0000}, /* brainpoolP256r1 */
 	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 9, -1}}, 320, 0x0000}, /* brainpoolP320r1 */
+	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 11, -1}},    384, 0x0000}, /* brainpoolP384r1 */
+	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 13, -1}},    512, 0x0000}, /* brainpoolP512r1 */
 	{{{1, 3, 132, 0, 31, -1}},              192, 0x0006}, /* secp192k1 */
 	{{{1, 3, 132, 0, 10, -1}},              256, 0x0006}, /* secp256k1 */
+	{{{1, 3, 132, 0, 34, -1}},              384, 0x0000}, /* secp384r1, nistp384, prime384v1, ansiX9p384r1 */
+	{{{1, 3, 132, 0, 35, -1}},              521, 0x0000}, /* secp521r1, nistp521 */
 	{{{-1}}, 0, 0} /* This entry must not be touched. */
 };
 
@@ -1059,6 +1063,11 @@ isoApplet_put_data_prkey_ec(sc_card_t *card, sc_cardctl_isoApplet_import_key_t *
 	apdu.lc = p - sbuf;
 	apdu.datalen = p - sbuf;
 	apdu.data = sbuf;
+	if ((card->caps & SC_CARD_CAP_APDU_EXT) == 0)
+	{
+		/* The lower layers will automatically do chaining */
+		apdu.flags |= SC_APDU_FLAGS_CHAINING;
+	}
 	r = sc_transmit_apdu(card, &apdu);
 	if(r < 0)
 	{
