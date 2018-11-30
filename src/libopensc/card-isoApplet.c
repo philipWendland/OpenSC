@@ -29,7 +29,8 @@
 #include "pkcs15.h"
 #include "types.h"
 
-#define ISOAPPLET_ALG_REF_ECDSA 0x21
+#define ISOAPPLET_ALG_REF_ECDSA_SHA1 0x21
+#define ISOAPPLET_ALG_REF_ECDSA_PRECOMPUTED_HASH 0x22
 #define ISOAPPLET_ALG_REF_RSA_PAD_PKCS1 0x11
 
 #define ISOAPPLET_API_VERSION_MAJOR 0x00
@@ -37,8 +38,9 @@
 
 #define ISOAPPLET_API_FEATURE_EXT_APDU 0x01
 #define ISOAPPLET_API_FEATURE_SECURE_RANDOM 0x02
-#define ISOAPPLET_API_FEATURE_ECC 0x04
+#define ISOAPPLET_API_FEATURE_ECDSA_SHA1 0x04
 #define ISOAPPLET_API_FEATURE_RSA_4096 0x08
+#define ISOAPPLET_API_FEATURE_ECDSA_PRECOMPUTED_HASH 0x10
 
 #define ISOAPPLET_AID_LEN 12
 static const u8 isoApplet_aid[] = {0xf2,0x76,0xa2,0x88,0xbc,0xfb,0xa6,0x9d,0x34,0xf3,0x10,0x01};
@@ -239,7 +241,7 @@ isoApplet_init(sc_card_t *card)
 		card->caps |=  SC_CARD_CAP_APDU_EXT;
 	if(rbuf[2] & ISOAPPLET_API_FEATURE_SECURE_RANDOM)
 		card->caps |=  SC_CARD_CAP_RNG;
-	if(drvdata->isoapplet_version <= 0x0005 || rbuf[2] & ISOAPPLET_API_FEATURE_ECC)
+	if(drvdata->isoapplet_version <= 0x0005 || rbuf[2] & (ISOAPPLET_API_FEATURE_ECDSA_SHA1 | ISOAPPLET_API_FEATURE_ECDSA_PRECOMPUTED_HASH))
 	{
 		/* There are Java Cards that do not support ECDSA at all. The IsoApplet
 		 * started to report this with version 00.06.
@@ -248,8 +250,16 @@ isoApplet_init(sc_card_t *card)
 		 * should be kept in sync with the explicit parameters in the pkcs15-init
 		 * driver. */
 		flags = 0;
-		flags |= SC_ALGORITHM_ECDSA_RAW;
-		flags |= SC_ALGORITHM_ECDSA_HASH_SHA1;
+		if (rbuf[2] & ISOAPPLET_API_FEATURE_ECDSA_SHA1)
+		{
+			flags |= SC_ALGORITHM_ECDSA_RAW;
+			flags |= SC_ALGORITHM_ECDSA_HASH_SHA1;
+		}
+		if (rbuf[2] & ISOAPPLET_API_FEATURE_ECDSA_PRECOMPUTED_HASH)
+		{
+			flags |= SC_ALGORITHM_ECDSA_RAW;
+			flags |= SC_ALGORITHM_ECDSA_HASH_NONE;
+		}
 		flags |= SC_ALGORITHM_ONBOARD_KEY_GEN;
 		ext_flags = SC_ALGORITHM_EXT_EC_UNCOMPRESES;
 		ext_flags |=  SC_ALGORITHM_EXT_EC_NAMEDCURVE;
@@ -771,9 +781,18 @@ isoApplet_ctl_generate_key(sc_card_t *card, sc_cardctl_isoApplet_genkey_t *args)
 			LOG_TEST_RET(card->ctx, SC_ERROR_INVALID_DATA, "Card returned no or a invalid order.");
 
 		inner_tag_value = sc_asn1_find_tag(card->ctx, outer_tag_value, outer_tag_len, (unsigned int) 0x87, &inner_tag_len);
-		if(inner_tag_value == NULL || inner_tag_len != args->pubkey.ec.params.coFactor.len
-		        || memcmp(inner_tag_value, args->pubkey.ec.params.coFactor.value, inner_tag_len) != 0)
-			LOG_TEST_RET(card->ctx, SC_ERROR_INVALID_DATA, "Card returned no or a invalid cofactor.");
+		if(args->pubkey.ec.params.coFactor.len == 1 && inner_tag_len == 2)
+		{
+			if(inner_tag_value == NULL || inner_tag_value[0] != 0
+				|| inner_tag_value[1] != args->pubkey.ec.params.coFactor.value[0])
+				LOG_TEST_RET(card->ctx, SC_ERROR_INVALID_DATA, "Card returned no or a invalid cofactor.");
+		}
+		else
+		{
+			if(inner_tag_value == NULL || inner_tag_len != args->pubkey.ec.params.coFactor.len
+			        || memcmp(inner_tag_value, args->pubkey.ec.params.coFactor.value, inner_tag_len) != 0)
+				LOG_TEST_RET(card->ctx, SC_ERROR_INVALID_DATA, "Card returned no or a invalid cofactor.");
+		}
 
 		/* Extract public key */
 		inner_tag_value = sc_asn1_find_tag(card->ctx, outer_tag_value, outer_tag_len, (unsigned int) 0x86, &inner_tag_len);
@@ -1296,7 +1315,18 @@ isoApplet_set_security_env(sc_card_t *card,
 		case SC_ALGORITHM_EC:
 			if( env->algorithm_flags & SC_ALGORITHM_ECDSA_RAW )
 			{
-				drvdata->sec_env_alg_ref = ISOAPPLET_ALG_REF_ECDSA;
+				if(env->algorithm_flags & SC_ALGORITHM_ECDSA_HASH_SHA1)
+				{
+					drvdata->sec_env_alg_ref = ISOAPPLET_ALG_REF_ECDSA_SHA1;
+				}
+				else if (env->algorithm_flags == SC_ALGORITHM_ECDSA_RAW)
+				{
+					drvdata->sec_env_alg_ref = ISOAPPLET_ALG_REF_ECDSA_PRECOMPUTED_HASH;
+				} 
+				else
+				{
+					LOG_TEST_RET(card->ctx, SC_ERROR_NOT_SUPPORTED, "IsoApplet only supports ECDSA with SHA1 and NONE hashes");
+				}
 				drvdata->sec_env_ec_field_length = env->algorithm_ref;
 			}
 			else
@@ -1358,37 +1388,57 @@ isoApplet_compute_signature(struct sc_card *card,
 	struct sc_context *ctx = card->ctx;
 	struct isoApplet_drv_data *drvdata = DRVDATA(card);
 	int r;
+	u8 *sig = NULL;
+	// 8 is max overhead of ASN.1 sequence of integers R,S
+	size_t siglen = outlen + 8;
 
 	LOG_FUNC_CALLED(ctx);
 
-	r = iso_ops->compute_signature(card, data, datalen, out, outlen);
+	sig = calloc(1,siglen);
+	if (!sig)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+	r = iso_ops->compute_signature(card, data, datalen, sig, siglen);
 	if(r < 0)
 	{
+		free(sig);
 		LOG_FUNC_RETURN(ctx, r);
 	}
 
 	/* If ECDSA was used, the ASN.1 sequence of integers R,S returned by the
 	 * card needs to be converted to the raw concatenation of R,S for PKCS#11. */
-	if(drvdata->sec_env_alg_ref == ISOAPPLET_ALG_REF_ECDSA)
+	if(drvdata->sec_env_alg_ref == ISOAPPLET_ALG_REF_ECDSA_SHA1 ||
+	        drvdata->sec_env_alg_ref == ISOAPPLET_ALG_REF_ECDSA_PRECOMPUTED_HASH)
 	{
 		u8* p = NULL;
 		size_t len = (drvdata->sec_env_ec_field_length + 7) / 8 * 2;
 
 		if (len > outlen)
+		{
+			free(sig);
 			LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+		}
 
 		p = calloc(1,len);
 		if (!p)
+		{
+			free(sig);
 			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		}
 
-		r = sc_asn1_sig_value_sequence_to_rs(ctx, out, r, p, len);
+		r = sc_asn1_sig_value_sequence_to_rs(ctx, sig, r, p, len);
 		if (!r)   {
 			memcpy(out, p, len);
 			r = len;
 		}
 
 		free(p);
+	} else if(drvdata->sec_env_alg_ref == ISOAPPLET_ALG_REF_RSA_PAD_PKCS1) {
+		memcpy(out, sig, outlen);
+	} else {
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
+	free(sig);
 	LOG_FUNC_RETURN(ctx, r);
 }
 
