@@ -8,7 +8,7 @@ cardinfo {
 	label          ="JavaCard isoApplet";
 	manufacturer   = "unknown";
 	min-pin-length = 4;
-	max-pin-length = 16;
+	max-pin-length = 12;
 	pin-pad-char   = 0x00;
 }
 
@@ -35,16 +35,16 @@ option default {
 
 PIN so-pin {
 	attempts   = 3;
-	max-length = 16;
-	min-length = 4; 
+	max-length = 12;
+	min-length = 4;
 	reference  = 1;
 	flags = case-sensitive, needs-padding, initialized;
 }
 
 PIN so-puk {
 	attempts   = 3;
-	max-length = 16;
-	min-length = 16;
+	max-length = 12;
+	min-length = 12;
 	reference  = 2;
 	flags = unblockingPin, unblock-disabled, case-sensitive, change-disabled, initialized;
 }
