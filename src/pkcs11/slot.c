@@ -319,6 +319,13 @@ again:
 			enable_InitToken = scconf_get_bool(conf_block,
 				"pkcs11_enable_InitToken", 0);
 
+			conf_block = sc_get_conf_block(p11card->card->ctx, "card_driver", p11card->card->driver->short_name, 1);
+			if (conf_block) {
+				/* Override global enable_InitToken value */
+				enable_InitToken = scconf_get_bool(conf_block,
+					"pkcs11_enable_InitToken", enable_InitToken);
+			}
+
 			sc_log(context, "%s: Try to bind 'generic' token.", reader->name);
 			rv = frameworks[i]->bind(p11card, app_generic);
 			if (rv == CKR_TOKEN_NOT_RECOGNIZED && enable_InitToken)   {

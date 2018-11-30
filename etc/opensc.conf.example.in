@@ -202,6 +202,14 @@ app default {
 		# user_consent_app = "/usr/bin/pinentry";
 	}
 
+	# pkcs11_enable_InitToken and user_pin_unblock_style can be set
+	# on a per card driver basis
+
+	card_driver isoApplet {
+		pkcs11_enable_InitToken = yes;
+		user_pin_unblock_style = set_pin_in_unlogged_session;
+	}
+
 	# In addition to the built-in list of known cards in the
 	# card driver, you can configure a new card for the driver
 	# using the card_atr block. The goal is to centralize
