@@ -38,6 +38,7 @@
 #define ISOAPPLET_API_FEATURE_EXT_APDU 0x01
 #define ISOAPPLET_API_FEATURE_SECURE_RANDOM 0x02
 #define ISOAPPLET_API_FEATURE_ECC 0x04
+#define ISOAPPLET_API_FEATURE_RSA_4096 0x08
 
 #define ISOAPPLET_AID_LEN 12
 static const u8 isoApplet_aid[] = {0xf2,0x76,0xa2,0x88,0xbc,0xfb,0xa6,0x9d,0x34,0xf3,0x10,0x01};
@@ -270,7 +271,16 @@ isoApplet_init(sc_card_t *card)
 	/* Key-generation: */
 	flags |= SC_ALGORITHM_ONBOARD_KEY_GEN;
 	/* Modulus lengths: */
+	if(drvdata->isoapplet_version >= 0x0007) {
+		_sc_card_add_rsa_alg(card, 1024, flags, 0);
+		_sc_card_add_rsa_alg(card, 1536, flags, 0);
+	}
 	_sc_card_add_rsa_alg(card, 2048, flags, 0);
+	if(rbuf[2] & ISOAPPLET_API_FEATURE_RSA_4096)
+	{
+		_sc_card_add_rsa_alg(card, 3072, flags, 0);
+		_sc_card_add_rsa_alg(card, 4096, flags, 0);
+	}
 
 	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 }
@@ -658,7 +668,15 @@ isoApplet_ctl_generate_key(sc_card_t *card, sc_cardctl_isoApplet_genkey_t *args)
 	}
 	else
 	{
-		sc_format_apdu(card, &apdu, SC_APDU_CASE_2, 0x46, 0x42, 0x00);
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_4, 0x46, 0x42, 0x00);
+		apdu.data = sbuf;
+		p = sbuf;
+		*p++ = 0x91; /* key length */
+		*p++ = 0x02;
+		*p++ = args->key_len / 256;
+		*p++ = args->key_len % 256;
+		apdu.datalen = p - sbuf;
+		apdu.lc = p - sbuf;
 	}
 
 	apdu.resp = rbuf;
@@ -691,10 +709,10 @@ isoApplet_ctl_generate_key(sc_card_t *card, sc_cardctl_isoApplet_genkey_t *args)
 	switch(args->algorithm_ref)
 	{
 
-	case SC_ISOAPPLET_ALG_REF_RSA_GEN_2048:
+	case SC_ISOAPPLET_ALG_REF_RSA_GEN:
 		/* Search for the modulus tag (81). */
 		inner_tag_value = sc_asn1_find_tag(card->ctx, outer_tag_value, outer_tag_len, (unsigned int) 0x81, &inner_tag_len);
-		if(inner_tag_value == NULL || inner_tag_len != 256)
+		if(inner_tag_value == NULL || inner_tag_len != args->key_len/8)
 		{
 			LOG_TEST_RET(card->ctx, SC_ERROR_INVALID_DATA, "Card returned no or a invalid modulus.");
 		}
@@ -820,10 +838,11 @@ static int
 isoApplet_put_data_prkey_rsa(sc_card_t *card, sc_cardctl_isoApplet_import_key_t *args)
 {
 	sc_apdu_t apdu;
-	u8 sbuf[SC_MAX_EXT_APDU_BUFFER_SIZE];
+	u8 sbuf[SC_MAX_EXT_APDU_BUFFER_SIZE], tmp[2];
 	u8 *p = NULL;
 	int r;
 	size_t tags_len;
+	struct isoApplet_drv_data *drvdata = (struct isoApplet_drv_data *)card->drv_data;
 
 	LOG_FUNC_CALLED(card->ctx);
 
@@ -841,6 +860,11 @@ isoApplet_put_data_prkey_rsa(sc_card_t *card, sc_cardctl_isoApplet_import_key_t 
 
 	/* Calculate the length of all inner tag-length-value entries, but do not write anything yet. */
 	tags_len = 0;
+	if (drvdata->isoapplet_version >= 0x0007) {
+		r = sc_asn1_put_tag(0x91, NULL, 2, NULL, 0, NULL);
+		LOG_TEST_RET(card->ctx, r, "Error handling TLV.");
+		tags_len += r;
+	}
 	r = sc_asn1_put_tag(0x92, NULL, args->privkey.rsa.p.len, NULL, 0, NULL);
 	LOG_TEST_RET(card->ctx, r, "Error handling TLV.");
 	tags_len += r;
@@ -863,6 +887,13 @@ isoApplet_put_data_prkey_rsa(sc_card_t *card, sc_cardctl_isoApplet_import_key_t 
 	LOG_TEST_RET(card->ctx, r, "Error handling TLV.");
 
 	/* Write inner tags. */
+	if (drvdata->isoapplet_version >= 0x0007) {
+		tmp[0] = args->key_len / 256;
+		tmp[1] = args->key_len % 256;
+		r = sc_asn1_put_tag(0x91, tmp, 2, p, sizeof(sbuf) - (p - sbuf), &p);
+		if(r < 0)
+			goto out;
+	}
 	/* p */
 	r = sc_asn1_put_tag(0x92, args->privkey.rsa.p.value, args->privkey.rsa.p.len, p, sizeof(sbuf) - (p - sbuf), &p);
 	if(r < 0)
@@ -1102,7 +1133,7 @@ isoApplet_ctl_import_key(sc_card_t *card, sc_cardctl_isoApplet_import_key_t *arg
 	switch(args->algorithm_ref)
 	{
 
-	case SC_ISOAPPLET_ALG_REF_RSA_GEN_2048:
+	case SC_ISOAPPLET_ALG_REF_RSA_GEN:
 		r = isoApplet_put_data_prkey_rsa(card, args);
 		LOG_TEST_RET(card->ctx, r, "Error in PUT DATA.");
 		break;
