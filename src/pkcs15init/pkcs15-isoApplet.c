@@ -334,6 +334,83 @@ isoApplet_create_pin(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_file_t
 
 	LOG_FUNC_CALLED(card->ctx);
 
+	if(!pin && !pin_len && ((pin_attrs->reference == 0x01) || (pin_attrs->reference == 0x0F)) &&
+				    (p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD))
+	{
+		struct sc_pin_cmd_data data;
+
+		if (pin_attrs->reference == 0x01)
+		{
+			memset(&data, 0, sizeof(data));
+			data.cmd = SC_PIN_CMD_CHANGE;
+			data.flags = SC_PIN_CMD_USE_PINPAD|SC_PIN_CMD_IMPLICIT_CHANGE;
+			data.pin_type = SC_AC_CHV;
+			data.pin_reference = pin_attrs->reference;
+			data.pin2.min_length = pin_attrs->min_length;
+			data.pin2.max_length = pin_attrs->max_length;
+			data.pin2.pad_length = pin_attrs->stored_length;
+			data.pin2.pad_char = pin_attrs->pad_char;
+			data.pin2.data = pin;
+			data.pin2.len = pin_len;
+			r = sc_pin_cmd(card, &data, NULL);
+			LOG_TEST_RET(card->ctx, r, "Failed to set PIN");
+			LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+		}
+		else if (pin_attrs->reference == 0x0F)
+		{
+			// If SO PIN is already verified, perform proprietary implicit
+			// transition from STATE_CREATION to STATE_INITIALISATION
+			struct sc_apdu apdu;
+			sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x24, 0x01, pin_attrs->reference);
+			apdu.cla = 0x80;
+			r = sc_transmit_apdu(card, &apdu);
+			SC_TEST_RET(card->ctx, SC_LOG_DEBUG_NORMAL, r,  "APDU transmit failed");
+			r = sc_check_sw(card, apdu.sw1, apdu.sw2);
+			if (r == SC_SUCCESS)
+			{
+				// Proprietary implicit transition successful
+				LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+			}
+			if ((apdu.sw1 == 0x69 && apdu.sw2 == 0x85)) // Conditions of use not satisfied
+			{
+				// transport_key set, perform transition by verifiing
+				memset(&data, 0, sizeof(data));
+				data.cmd = SC_PIN_CMD_VERIFY;
+				data.flags = SC_PIN_CMD_USE_PINPAD;
+				data.pin_type = SC_AC_CHV;
+				data.pin_reference = pin_attrs->reference;
+				data.pin1.min_length = pin_attrs->min_length;
+				data.pin1.max_length = pin_attrs->max_length;
+				data.pin1.pad_length = pin_attrs->stored_length;
+				data.pin1.pad_char = pin_attrs->pad_char;
+				data.pin1.data = pin;
+				data.pin1.len = pin_len;
+			}
+			else if ((apdu.sw1 == 0x98 && apdu.sw2 == 0x02)) // No PIN defined
+			{
+				// transport_key not set, perform transition by doing implicit change
+				memset(&data, 0, sizeof(data));
+				data.cmd = SC_PIN_CMD_CHANGE;
+				data.flags = SC_PIN_CMD_USE_PINPAD|SC_PIN_CMD_IMPLICIT_CHANGE;
+				data.pin_type = SC_AC_CHV;
+				data.pin_reference = pin_attrs->reference;
+				data.pin2.min_length = pin_attrs->min_length;
+				data.pin2.max_length = pin_attrs->max_length;
+				data.pin2.pad_length = pin_attrs->stored_length;
+				data.pin2.pad_char = pin_attrs->pad_char;
+				data.pin2.data = pin;
+				data.pin2.len = pin_len;
+			}
+			else
+			{
+				LOG_TEST_RET(card->ctx, r, "Failed to check SO PIN status");
+			}
+			r = sc_pin_cmd(card, &data, NULL);
+			LOG_TEST_RET(card->ctx, r, "Failed to set SO PIN");
+			LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+		}
+	}
+
 	if(!pin || !pin_len || !df)
 	{
 		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INVALID_ARGUMENTS);

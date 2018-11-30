@@ -1528,6 +1528,19 @@ isoApplet_list_files(struct sc_card *card, u8 *buf, size_t buflen) {
 	return apdu.resplen;
 }
 
+static int
+isoApplet_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left) {
+	if ((data->cmd == SC_PIN_CMD_GET_INFO) && (card->reader->capabilities & SC_READER_CAP_PIN_PAD))
+	{
+		// Fix around pinpad firewalled readers
+		struct sc_apdu apdu;
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0x00, data->pin_reference);
+		apdu.cla = 0x80;
+		data->apdu = &apdu;
+	}
+	return iso_ops->pin_cmd(card, data, tries_left);
+}
+
 static struct sc_card_driver *sc_get_driver(void)
 {
 	sc_card_driver_t *iso_drv = sc_get_iso7816_driver();
@@ -1553,6 +1566,8 @@ static struct sc_card_driver *sc_get_driver(void)
 	isoApplet_ops.get_challenge = isoApplet_get_challenge;
 	isoApplet_ops.card_reader_lock_obtained = isoApplet_card_reader_lock_obtained;
 	isoApplet_ops.list_files = isoApplet_list_files;
+
+	isoApplet_ops.pin_cmd = isoApplet_pin_cmd;
 
 	/* unsupported functions */
 	isoApplet_ops.write_binary = NULL;
