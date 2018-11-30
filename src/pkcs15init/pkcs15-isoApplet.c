@@ -640,6 +640,25 @@ isoApplet_generate_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
 	LOG_FUNC_RETURN(card->ctx, r);
 }
 
+/*
+ * @brief In case of private key delete call isoApplet_ctl_delete_key()
+ *
+ * A MANAGE SECURITY ENVIRONMENT apdu must have been sent before.
+ * This function uses card_ctl to access the card-isoApplet driver.
+ */
+static int
+isoApplet_delete_object(struct sc_profile *profile, struct sc_pkcs15_card * p15card,
+                        struct sc_pkcs15_object *object, const struct sc_path *path) {
+	sc_card_t *card = p15card->card;
+
+	LOG_FUNC_CALLED(card->ctx);
+
+	if ((object->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_PRKEY) {
+		LOG_FUNC_RETURN(card->ctx, sc_card_ctl(card, SC_CARDCTL_ISOAPPLET_DELETE_KEY, object));
+	}
+
+	LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_SUPPORTED);
+}
 
 /*
  * Create a new key file. This is a no-op, because private keys are stored as key objects on the javacard.
@@ -786,7 +805,7 @@ static struct sc_pkcs15init_operations sc_pkcs15init_isoApplet_operations =
 	isoApplet_generate_key,         /* generate_key */
 	NULL, NULL,                     /* encode private/public key */
 	NULL,                           /* finalize */
-	NULL,                           /* delete_object */
+	isoApplet_delete_object,        /* delete_object */
 	NULL, NULL, NULL, NULL, NULL,   /* pkcs15init emulation */
 	NULL,                           /* sanity_check*/
 };

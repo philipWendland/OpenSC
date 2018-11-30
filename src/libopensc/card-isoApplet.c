@@ -739,6 +739,39 @@ isoApplet_ctl_generate_key(sc_card_t *card, sc_cardctl_isoApplet_genkey_t *args)
 }
 
 /*
+ * @brief Perform actual on card key delete.
+ */
+static int
+isoApplet_ctl_delete_key(sc_card_t *card, sc_pkcs15_object_t *object)
+{
+	int r;
+	struct sc_pkcs15_prkey_info *key_info = NULL;
+	sc_apdu_t apdu;
+	struct isoApplet_drv_data *drvdata = (struct isoApplet_drv_data *)card->drv_data;
+
+	LOG_FUNC_CALLED(card->ctx);
+
+	key_info = (struct sc_pkcs15_prkey_info *)object->data;
+	if (key_info == NULL) {
+		LOG_FUNC_RETURN(card->ctx, SC_ERROR_INTERNAL);
+	}
+
+	if (drvdata->isoapplet_version < 0x0007)
+		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+
+	/* ISO7816 proprietary DELETE_KEY apdu */
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0xE5, 0x00, key_info->key_reference);
+	apdu.cla = 0x80;
+	r = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(card->ctx, r, "APDU transmit failed");
+
+	r = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(card->ctx, r, "Card returned error");
+
+	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+}
+
+/*
  * @brief Use PUT DATA to import a private RSA key.
  *
  * For simplicity, command chaining has to be used. One chunk (apdu) must contain
@@ -1064,6 +1097,10 @@ isoApplet_card_ctl(sc_card_t *card, unsigned long cmd, void *ptr)
 	case SC_CARDCTL_ISOAPPLET_GENERATE_KEY:
 		r = isoApplet_ctl_generate_key(card,
 		                               (sc_cardctl_isoApplet_genkey_t *) ptr);
+		break;
+	case SC_CARDCTL_ISOAPPLET_DELETE_KEY:
+		r = isoApplet_ctl_delete_key(card,
+		                               (sc_pkcs15_object_t *) ptr);
 		break;
 	case SC_CARDCTL_ISOAPPLET_IMPORT_KEY:
 		r = isoApplet_ctl_import_key(card,
