@@ -149,6 +149,21 @@ isoApplet_finish(sc_card_t *card)
 }
 
 static int
+isoApplet_logout(sc_card_t *card)
+{
+	int r;
+	struct isoApplet_drv_data *drvdata = (struct isoApplet_drv_data *)card->drv_data;
+
+	LOG_FUNC_CALLED(card->ctx);
+	if (drvdata->isoapplet_version < 0x0007)
+			LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+
+	r = iso7816_logout(card, 0x00);
+	SC_TEST_RET(card->ctx, SC_LOG_DEBUG_NORMAL, r,  "logout failed");
+	LOG_FUNC_RETURN(card->ctx, r);
+}
+
+static int
 isoApplet_match_card(sc_card_t *card)
 {
 	size_t rlen = SC_MAX_APDU_BUFFER_SIZE;
@@ -1272,6 +1287,7 @@ static struct sc_card_driver *sc_get_driver(void)
 	isoApplet_ops.match_card = isoApplet_match_card;
 	isoApplet_ops.init = isoApplet_init;
 	isoApplet_ops.finish = isoApplet_finish;
+	isoApplet_ops.logout = isoApplet_logout;
 
 	isoApplet_ops.card_ctl = isoApplet_card_ctl;
 
