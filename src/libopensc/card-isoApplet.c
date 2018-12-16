@@ -81,20 +81,20 @@ static struct isoapplet_supported_ec_curves {
 		size_t size;
 		unsigned int min_applet_version;
 } ec_curves[] = {
-	{{{1, 2, 840, 10045, 3, 1, 1, -1}},     192, 0x0000}, /* secp192r1, nistp192, prime192v1, ansiX9p192r1 */
-	{{{1, 3, 132, 0, 33, -1}},              224, 0x0000}, /* secp224r1, nistp224 */
-	{{{1, 2, 840, 10045, 3, 1, 7, -1}},     256, 0x0000}, /* secp256r1, nistp256, prime256v1, ansiX9p256r1 */
-	{{{1, 3, 132, 0, 34, -1}},              384, 0x0000}, /* secp384r1, nistp384, prime384v1, ansiX9p384r1 */
-	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 3, -1}}, 192, 0x0000}, /* brainpoolP192r1 */
-	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 5, -1}}, 224, 0x0000}, /* brainpoolP224r1 */
-	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 7, -1}}, 256, 0x0000}, /* brainpoolP256r1 */
-	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 9, -1}}, 320, 0x0000}, /* brainpoolP320r1 */
-	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 11, -1}},    384, 0x0000}, /* brainpoolP384r1 */
-	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 13, -1}},    512, 0x0000}, /* brainpoolP512r1 */
-	{{{1, 3, 132, 0, 31, -1}},              192, 0x0006}, /* secp192k1 */
-	{{{1, 3, 132, 0, 10, -1}},              256, 0x0006}, /* secp256k1 */
-	{{{1, 3, 132, 0, 34, -1}},              384, 0x0000}, /* secp384r1, nistp384, prime384v1, ansiX9p384r1 */
-	{{{1, 3, 132, 0, 35, -1}},              521, 0x0000}, /* secp521r1, nistp521 */
+	{{{1, 2, 840, 10045, 3, 1, 1, -1}},      192, 0x0000}, /* secp192r1, nistp192, prime192v1, ansiX9p192r1 */
+	{{{1, 3, 132, 0, 33, -1}},               224, 0x0000}, /* secp224r1, nistp224 */
+	{{{1, 2, 840, 10045, 3, 1, 7, -1}},      256, 0x0000}, /* secp256r1, nistp256, prime256v1, ansiX9p256r1 */
+	{{{1, 3, 132, 0, 34, -1}},               384, 0x0000}, /* secp384r1, nistp384, prime384v1, ansiX9p384r1 */
+	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 3, -1}},  192, 0x0000}, /* brainpoolP192r1 */
+	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 5, -1}},  224, 0x0000}, /* brainpoolP224r1 */
+	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 7, -1}},  256, 0x0000}, /* brainpoolP256r1 */
+	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 9, -1}},  320, 0x0000}, /* brainpoolP320r1 */
+	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 11, -1}}, 384, 0x0000}, /* brainpoolP384r1 */
+	{{{1, 3, 36, 3, 3, 2, 8, 1, 1, 13, -1}}, 512, 0x0000}, /* brainpoolP512r1 */
+	{{{1, 3, 132, 0, 31, -1}},               192, 0x0006}, /* secp192k1 */
+	{{{1, 3, 132, 0, 10, -1}},               256, 0x0006}, /* secp256k1 */
+	{{{1, 3, 132, 0, 34, -1}},               384, 0x0000}, /* secp384r1, nistp384, prime384v1, ansiX9p384r1 */
+	{{{1, 3, 132, 0, 35, -1}},               521, 0x0000}, /* secp521r1, nistp521 */
 	{{{-1}}, 0, 0} /* This entry must not be touched. */
 };
 
@@ -222,6 +222,7 @@ isoApplet_init(sc_card_t *card)
 	unsigned long ext_flags = 0;
 	size_t rlen = SC_MAX_APDU_BUFFER_SIZE;
 	u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
+	u8 enabled_features;
 	struct isoApplet_drv_data *drvdata;
 
 	LOG_FUNC_CALLED(card->ctx);
@@ -232,6 +233,7 @@ isoApplet_init(sc_card_t *card)
 
 	card->drv_data = drvdata;
 	card->cla = 0x00;
+	card->caps |= SC_CARD_CAP_ISO7816_PIN_INFO;
 
 	/* Obtain applet version and specific features */
 	if (0 > isoApplet_select_applet(card, isoApplet_aid, ISOAPPLET_AID_LEN, rbuf, &rlen)) {
@@ -243,30 +245,35 @@ isoApplet_init(sc_card_t *card)
 		memset(rbuf, 0x00, 3);
 	}
 	drvdata->isoapplet_version = ((unsigned int)rbuf[0] << 8) | rbuf[1];
-	if(rbuf[2] & ISOAPPLET_API_FEATURE_EXT_APDU)
+	enabled_features = rbuf[2];
+
+	if(enabled_features & ISOAPPLET_API_FEATURE_EXT_APDU)
 		card->caps |=  SC_CARD_CAP_APDU_EXT;
-	if(rbuf[2] & ISOAPPLET_API_FEATURE_SECURE_RANDOM)
+	if(enabled_features & ISOAPPLET_API_FEATURE_SECURE_RANDOM)
 		card->caps |=  SC_CARD_CAP_RNG;
-	if(drvdata->isoapplet_version <= 0x0005 || rbuf[2] & (ISOAPPLET_API_FEATURE_ECDSA_SHA1 | ISOAPPLET_API_FEATURE_ECDSA_PRECOMPUTED_HASH | ISOAPPLET_API_FEATURE_ECDH))
+
+	/* ECC features */
+	if(drvdata->isoapplet_version <= 0x0005 || enabled_features & ISOAPPLET_API_FEATURE_ECDSA_SHA1)
 	{
-		/* There are Java Cards that do not support ECDSA at all. The IsoApplet
-		 * started to report this with version 00.06.
-		 *
-		 * Curves supported by the pkcs15-init driver are indicated per curve. This
-		 * should be kept in sync with the explicit parameters in the pkcs15-init
-		 * driver. */
+		/* There are Java Cards that do not support ECDSA at all.
+		 * The IsoApplet started to report this with version 00.06.
+		 * ECDSA with on-card hashing is useless, so this feature is disabled.
+		 * In version 00.07, ECDSA with off-card hashing and ECDH was supported on modern JavaCards.
+		 */
+		sc_log(card->ctx, "You are using an old version of IsoApplet with a newer version of OpenSC. "
+			   "ECDSA with on-card hashing is disabled.");
+	}
+	if(drvdata->isoapplet_version >= 0x0007 && (
+				enabled_features & ISOAPPLET_API_FEATURE_ECDSA_PRECOMPUTED_HASH ||
+				enabled_features & ISOAPPLET_API_FEATURE_ECDH))
+	{
 		flags = 0;
-		if (rbuf[2] & ISOAPPLET_API_FEATURE_ECDSA_SHA1)
-		{
-			flags |= SC_ALGORITHM_ECDSA_RAW;
-			flags |= SC_ALGORITHM_ECDSA_HASH_SHA1;
-		}
-		if (rbuf[2] & ISOAPPLET_API_FEATURE_ECDSA_PRECOMPUTED_HASH)
+		if (enabled_features & ISOAPPLET_API_FEATURE_ECDSA_PRECOMPUTED_HASH)
 		{
 			flags |= SC_ALGORITHM_ECDSA_RAW;
 			flags |= SC_ALGORITHM_ECDSA_HASH_NONE;
 		}
-		if (rbuf[2] & ISOAPPLET_API_FEATURE_ECDH)
+		if (enabled_features & ISOAPPLET_API_FEATURE_ECDH)
 		{
 			flags |= SC_ALGORITHM_ECDSA_RAW;
 			flags |= SC_ALGORITHM_ECDH_CDH_RAW;
@@ -275,15 +282,17 @@ isoApplet_init(sc_card_t *card)
 		ext_flags = SC_ALGORITHM_EXT_EC_UNCOMPRESES;
 		ext_flags |=  SC_ALGORITHM_EXT_EC_NAMEDCURVE;
 		ext_flags |= SC_ALGORITHM_EXT_EC_F_P;
+		/* Curves supported by the pkcs15-init driver are indicated per curve. This
+		 * should be kept in sync with the explicit parameters in the pkcs15-init driver.
+		 */
 		for (i=0; ec_curves[i].oid.value[0] >= 0; i++)
 		{
 			if(drvdata->isoapplet_version >= ec_curves[i].min_applet_version)
 				_sc_card_add_ec_alg(card, ec_curves[i].size, flags, ext_flags, &ec_curves[i].oid);
 		}
 	}
-	card->caps |= SC_CARD_CAP_ISO7816_PIN_INFO;
 
-	/* RSA */
+	/* RSA features */
 	flags = 0;
 	/* Padding schemes: */
 	flags |= SC_ALGORITHM_RSA_PAD_PKCS1;
@@ -297,7 +306,7 @@ isoApplet_init(sc_card_t *card)
 		_sc_card_add_rsa_alg(card, 1536, flags, 0);
 	}
 	_sc_card_add_rsa_alg(card, 2048, flags, 0);
-	if(rbuf[2] & ISOAPPLET_API_FEATURE_RSA_4096)
+	if(enabled_features & ISOAPPLET_API_FEATURE_RSA_4096)
 	{
 		_sc_card_add_rsa_alg(card, 3072, flags, 0);
 		_sc_card_add_rsa_alg(card, 4096, flags, 0);
@@ -1348,7 +1357,7 @@ isoApplet_set_security_env(sc_card_t *card,
 					else if (env->algorithm_flags == SC_ALGORITHM_ECDSA_RAW)
 					{
 						drvdata->sec_env_alg_ref = ISOAPPLET_ALG_REF_ECDSA_PRECOMPUTED_HASH;
-					} 
+					}
 					else
 					{
 						LOG_TEST_RET(card->ctx, SC_ERROR_NOT_SUPPORTED, "IsoApplet only supports ECDSA with SHA1 and NONE hashes");
