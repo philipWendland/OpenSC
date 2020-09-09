@@ -282,7 +282,7 @@ enum {
 	SC_CARDCTL_DNIE_GET_INFO,
 
 	/*
-	 * isoApplet Java Card Applet
+	 * IsoApplet Java Card Applet
 	 */
 	SC_CARDCTL_ISOAPPLET_BASE = _CTL_PREFIX('I','S','O'),
 	SC_CARDCTL_ISOAPPLET_GENERATE_KEY,
@@ -1074,22 +1074,22 @@ typedef struct sc_cardctl_sc_hsm_wrapped_key {
 } sc_cardctl_sc_hsm_wrapped_key_t;
 
 /*
- * isoApplet
+ * IsoApplet
  */
 
 #define SC_ISOAPPLET_ALG_REF_RSA_GEN_2048 0xF3
 #define SC_ISOAPPLET_ALG_REF_EC_GEN 0xEC
 
-typedef struct sc_cardctl_isoApplet_ec_parameters {
+typedef struct sc_cardctl_isoapplet_ec_parameters {
 	struct sc_lv_data prime;
 	struct sc_lv_data coefficientA;
 	struct sc_lv_data coefficientB;
 	struct sc_lv_data basePointG;
 	struct sc_lv_data order;
 	struct sc_lv_data coFactor;
-} sc_cardctl_isoApplet_ec_parameters_t;
+} sc_cardctl_isoapplet_ec_parameters_t;
 
-typedef struct sc_cardctl_isoApplet_genkey {
+typedef struct sc_cardctl_isoapplet_genkey {
 	u8 algorithm_ref;			/* Algorithm reference sent to card */
 	unsigned int priv_key_ref;	/* Private key reference sent to card */
 	union {
@@ -1100,13 +1100,13 @@ typedef struct sc_cardctl_isoApplet_genkey {
 		} rsa;
 		struct
 		{
-			sc_cardctl_isoApplet_ec_parameters_t params;
+			sc_cardctl_isoapplet_ec_parameters_t params;
 			struct sc_lv_data ecPointQ;
 		} ec;
 	} pubkey;
-} sc_cardctl_isoApplet_genkey_t;
+} sc_cardctl_isoapplet_genkey_t;
 
-typedef struct sc_cardctl_isoApplet_import_key {
+typedef struct sc_cardctl_isoapplet_import_key {
 	u8 algorithm_ref;			/* Algorithm reference sent to card */
 	unsigned int priv_key_ref;	/* Private key reference sent to card */
 	union {
@@ -1120,11 +1120,11 @@ typedef struct sc_cardctl_isoApplet_import_key {
 		} rsa;
 		struct
 		{
-			sc_cardctl_isoApplet_ec_parameters_t params;
+			sc_cardctl_isoapplet_ec_parameters_t params;
 			struct sc_lv_data privateD;
 		} ec;
 	} privkey;
-} sc_cardctl_isoApplet_import_key_t;
+} sc_cardctl_isoapplet_import_key_t;
 
 /*
  * coolkey object returned from the card control interface

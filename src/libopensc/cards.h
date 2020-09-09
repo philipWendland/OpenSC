@@ -300,7 +300,7 @@ extern sc_card_driver_t *sc_get_authentic_driver(void);
 extern sc_card_driver_t *sc_get_iasecc_driver(void);
 extern sc_card_driver_t *sc_get_epass2003_driver(void);
 extern sc_card_driver_t *sc_get_dnie_driver(void);
-extern sc_card_driver_t *sc_get_isoApplet_driver(void);
+extern sc_card_driver_t *sc_get_isoapplet0_driver(void);
 extern sc_card_driver_t *sc_get_masktech_driver(void);
 extern sc_card_driver_t *sc_get_gids_driver(void);
 extern sc_card_driver_t *sc_get_jpki_driver(void);

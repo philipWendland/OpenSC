@@ -48,7 +48,8 @@ libopensc_la_SOURCES_BASE = \
 	card-itacns.c card-authentic.c \
 	card-iasecc.c iasecc-sdo.c iasecc-sm.c card-sc-hsm.c \
 	card-dnie.c cwa14890.c cwa-dnie.c \
-	card-isoApplet.c card-masktech.c card-gids.c card-jpki.c \
+	card-isoapplet-common.c card-isoapplet0.c \
+	card-masktech.c card-gids.c card-jpki.c \
 	card-npa.c card-esteid2018.c card-idprime.c \
 	\
 	pkcs15-openpgp.c pkcs15-starcert.c pkcs15-cardos.c \

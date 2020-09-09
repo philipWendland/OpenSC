@@ -179,7 +179,7 @@ static const struct ec_curve curves[] =
  * Create DF, using default pkcs15init functions.
  */
 static int
-isoApplet_create_dir(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_file_t *df)
+isoapplet_create_dir(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_file_t *df)
 {
 	sc_card_t *card = p15card->card;
 	int r = SC_SUCCESS;
@@ -204,7 +204,7 @@ isoApplet_create_dir(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_file_t
  * The reference for the PIN is 1, for the PUK 2.
  */
 static int
-isoApplet_select_pin_reference(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
+isoapplet_select_pin_reference(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
                                sc_pkcs15_auth_info_t *auth_info)
 {
 	sc_card_t *card = p15card->card;
@@ -253,7 +253,7 @@ isoApplet_select_pin_reference(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
  * "STATE_OPERATIONAL_ACTIVATED" lifecycle state.
  */
 static int
-isoApplet_create_pin(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_file_t *df,
+isoapplet_create_pin(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_file_t *df,
                      sc_pkcs15_object_t *pin_obj,
                      const u8 *pin, size_t pin_len,
                      const u8 *puk, size_t puk_len)
@@ -313,7 +313,7 @@ isoApplet_create_pin(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_file_t
  *										was not found
  */
 static int
-isoApplet_get_curve(u8 *oid, size_t oid_len, const struct ec_curve **curve_out)
+isoapplet_get_curve(u8 *oid, size_t oid_len, const struct ec_curve **curve_out)
 {
 	int i;
 
@@ -338,7 +338,7 @@ isoApplet_get_curve(u8 *oid, size_t oid_len, const struct ec_curve **curve_out)
  * @brief Generate a RSA private key on the card.
  *
  * A MANAGE SECURITY ENVIRONMENT apdu must have been sent before.
- * This function uses card_ctl to access the card-isoApplet driver.
+ * This function uses card_ctl to access the card-isoapplet driver.
  *
  * @param[in] key_info
  * @param[in] card
@@ -349,12 +349,12 @@ isoApplet_get_curve(u8 *oid, size_t oid_len, const struct ec_curve **curve_out)
  *          SC_ERROR_OUT_OF_MEMORY
  */
 static int
-isoApplet_generate_key_rsa(sc_pkcs15_prkey_info_t *key_info, sc_card_t *card,
+isoapplet_generate_key_rsa(sc_pkcs15_prkey_info_t *key_info, sc_card_t *card,
                            sc_pkcs15_pubkey_t *pubkey)
 {
 	int rv;
 	size_t keybits;
-	struct sc_cardctl_isoApplet_genkey args;
+	struct sc_cardctl_isoapplet_genkey args;
 
 	LOG_FUNC_CALLED(card->ctx);
 
@@ -427,7 +427,7 @@ err:
  * @brief Generate a EC private key on the card.
  *
  * A MANAGE SECURITY ENVIRONMENT apdu must have been sent before.
- * This function uses card_ctl to access the card-isoApplet driver.
+ * This function uses card_ctl to access the card-isoapplet driver.
  *
  * @param[in]     key_info
  * @param[in]     card
@@ -441,13 +441,13 @@ err:
  *                                    handled.
  */
 static int
-isoApplet_generate_key_ec(const sc_pkcs15_prkey_info_t *key_info, sc_card_t *card,
+isoapplet_generate_key_ec(const sc_pkcs15_prkey_info_t *key_info, sc_card_t *card,
                           sc_pkcs15_pubkey_t *pubkey)
 {
 	int	r;
 	const struct ec_curve *curve = NULL;
 	struct sc_ec_parameters *alg_id_params = NULL;
-	sc_cardctl_isoApplet_genkey_t args;
+	sc_cardctl_isoapplet_genkey_t args;
 	const struct sc_ec_parameters *info_ecp =
 	    (struct sc_ec_parameters *) key_info->params.data;
 
@@ -461,7 +461,7 @@ isoApplet_generate_key_ec(const sc_pkcs15_prkey_info_t *key_info, sc_card_t *car
 		goto out;
 	}
 
-	r = isoApplet_get_curve(info_ecp->der.value, info_ecp->der.len, &curve);
+	r = isoapplet_get_curve(info_ecp->der.value, info_ecp->der.len, &curve);
 	if(r < 0)
 	{
 		sc_log(card->ctx, "EC key generation failed: Unsupported curve: [%s].", info_ecp->named_curve);
@@ -596,7 +596,7 @@ out:
 }
 
 static int
-isoApplet_generate_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
+isoapplet_generate_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
                        sc_pkcs15_object_t *obj,
                        sc_pkcs15_pubkey_t *pubkey)
 {
@@ -625,11 +625,11 @@ isoApplet_generate_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
 	switch(obj->type)
 	{
 	case SC_PKCS15_TYPE_PRKEY_RSA:
-		r = isoApplet_generate_key_rsa(key_info, card, pubkey);
+		r = isoapplet_generate_key_rsa(key_info, card, pubkey);
 		break;
 
 	case SC_PKCS15_TYPE_PRKEY_EC:
-		r = isoApplet_generate_key_ec(key_info, card, pubkey);
+		r = isoapplet_generate_key_ec(key_info, card, pubkey);
 		break;
 
 	default:
@@ -645,7 +645,7 @@ isoApplet_generate_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
  * Create a new key file. This is a no-op, because private keys are stored as key objects on the javacard.
  */
 static int
-isoApplet_create_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_pkcs15_object_t *obj)
+isoapplet_create_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_pkcs15_object_t *obj)
 {
 	sc_card_t *card = p15card->card;
 	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
@@ -655,7 +655,7 @@ isoApplet_create_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_pkcs15
  * Select a key reference.
  */
 static int
-isoApplet_select_key_reference(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
+isoapplet_select_key_reference(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
                                sc_pkcs15_prkey_info_t *key_info)
 {
 	int rv = SC_SUCCESS;
@@ -679,13 +679,13 @@ isoApplet_select_key_reference(sc_profile_t *profile, sc_pkcs15_card_t *p15card,
  * Store a usable private key on the card.
  */
 static int
-isoApplet_store_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_pkcs15_object_t *object,
+isoapplet_store_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_pkcs15_object_t *object,
                     sc_pkcs15_prkey_t *key)
 {
 	sc_card_t *card = p15card->card;
 	sc_pkcs15_prkey_info_t *key_info = (sc_pkcs15_prkey_info_t *) object->data;
 	sc_file_t *privKeyFile=NULL;
-	sc_cardctl_isoApplet_import_key_t args;
+	sc_cardctl_isoapplet_import_key_t args;
 	int r;
 
 	LOG_FUNC_CALLED(card->ctx);
@@ -738,7 +738,7 @@ isoApplet_store_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_pkcs15_
 			r = sc_pkcs15_fix_ec_parameters(card->ctx, &key->u.ec.params);
 			LOG_TEST_RET(card->ctx, r, "EC key storing failed: Unknown curve.");
 		}
-		r = isoApplet_get_curve(key->u.ec.params.der.value, key->u.ec.params.der.len, &curve);
+		r = isoapplet_get_curve(key->u.ec.params.der.value, key->u.ec.params.der.len, &curve);
 		LOG_TEST_RET(card->ctx, r, "EC key generation failed: Unsupported curve");
 		args.privkey.ec.params.prime.value        = curve->prime.value;
 		args.privkey.ec.params.prime.len          = curve->prime.len;
@@ -772,18 +772,18 @@ isoApplet_store_key(sc_profile_t *profile, sc_pkcs15_card_t *p15card, sc_pkcs15_
 	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 }
 
-static struct sc_pkcs15init_operations sc_pkcs15init_isoApplet_operations =
+static struct sc_pkcs15init_operations sc_pkcs15init_isoapplet_operations =
 {
 	NULL,                           /* erase_card */
 	NULL,                           /* init_card */
-	isoApplet_create_dir,           /* create_dir */
+	isoapplet_create_dir,           /* create_dir */
 	NULL,                           /* create_domain */
-	isoApplet_select_pin_reference, /* pin_reference*/
-	isoApplet_create_pin,           /* create_pin */
-	isoApplet_select_key_reference, /* key_reference */
-	isoApplet_create_key,           /* create_key */
-	isoApplet_store_key,            /* store_key */
-	isoApplet_generate_key,         /* generate_key */
+	isoapplet_select_pin_reference, /* pin_reference*/
+	isoapplet_create_pin,           /* create_pin */
+	isoapplet_select_key_reference, /* key_reference */
+	isoapplet_create_key,           /* create_key */
+	isoapplet_store_key,            /* store_key */
+	isoapplet_generate_key,         /* generate_key */
 	NULL, NULL,                     /* encode private/public key */
 	NULL,                           /* finalize */
 	NULL,                           /* delete_object */
@@ -792,7 +792,7 @@ static struct sc_pkcs15init_operations sc_pkcs15init_isoApplet_operations =
 };
 
 struct
-sc_pkcs15init_operations *sc_pkcs15init_get_isoApplet_ops(void)
+sc_pkcs15init_operations *sc_pkcs15init_get_isoapplet_ops(void)
 {
-	return &sc_pkcs15init_isoApplet_operations;
+	return &sc_pkcs15init_isoapplet_operations;
 }
