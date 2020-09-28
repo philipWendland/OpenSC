@@ -36,7 +36,7 @@ option default {
 PIN so-pin {
 	attempts   = 3;
 	max-length = 16;
-	min-length = 4; 
+	min-length = 4;
 	reference  = 1;
 	flags = case-sensitive, needs-padding, initialized;
 }
@@ -69,7 +69,7 @@ filesystem {
 			aid     = A0:00:00:00:63:50:4B:43:53:2D:31:35;
 			acl     = *=NONE, DELETE=$PIN;
 			size    = 5000;
-		
+
 			EF PKCS15-ODF {
 				file-id = 5031;
 				size    = $odf-size;
